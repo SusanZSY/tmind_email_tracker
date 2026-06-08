@@ -49,6 +49,24 @@ def event_day(value: Any) -> date | None:
         return None
 
 
+def step_label(value: Any) -> str:
+    if value in (None, ""):
+        return "No Step"
+    if isinstance(value, float) and value.is_integer():
+        return f"Step {int(value)}"
+    if isinstance(value, int):
+        return f"Step {value}"
+    text = str(value).strip()
+    if text.replace(".", "", 1).isdigit():
+        try:
+            number = float(text)
+            if number.is_integer():
+                return f"Step {int(number)}"
+        except ValueError:
+            pass
+    return text if text.lower().startswith("step") else f"Step {text}"
+
+
 def daterange(start: date, end: date) -> list[date]:
     days = (end - start).days
     return [start + timedelta(days=offset) for offset in range(days + 1)]
@@ -86,10 +104,13 @@ def process_dashboard_data(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     daily_counts: dict[str, Counter[str]] = defaultdict(Counter)
     email_daily_counts: dict[str, dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
+    step_daily_counts: dict[str, dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
     type_counts: Counter[str] = Counter()
     email_counts: Counter[str] = Counter()
     email_type_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    step_type_counts: dict[str, Counter[str]] = defaultdict(Counter)
     event_days: list[date] = []
+    processed_events: list[dict[str, str]] = []
 
     for row in rows:
         activity_type = normalize(row.get("Type"))
@@ -97,6 +118,7 @@ def process_dashboard_data(rows: list[dict[str, Any]]) -> dict[str, Any]:
             continue
 
         email = str(row.get("Email") or "NO_EMAIL").strip()
+        step = step_label(row.get("Step"))
         day = event_day(row.get("Timestamp"))
         date_str = day.isoformat() if day else event_date(row.get("Timestamp"))
 
@@ -105,10 +127,20 @@ def process_dashboard_data(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if date_str and email != "NO_EMAIL":
             daily_counts[date_str][activity_type] += 1
             email_daily_counts[email][date_str][activity_type] += 1
+            step_daily_counts[step][date_str][activity_type] += 1
+            processed_events.append(
+                {
+                    "date": date_str,
+                    "type": activity_type,
+                    "email": email,
+                    "step": step,
+                }
+            )
         
         type_counts[activity_type] += 1
         email_counts[email] += 1
         email_type_counts[email][activity_type] += 1
+        step_type_counts[step][activity_type] += 1
 
     all_days = daterange(min(event_days), max(event_days)) if event_days else []
     date_range = [day.isoformat() for day in all_days]
@@ -162,10 +194,35 @@ def process_dashboard_data(rows: list[dict[str, Any]]) -> dict[str, Any]:
             }
         )
 
+    step_daily_data = []
+    for step in sorted(step_type_counts, key=lambda item: (not item.startswith("Step "), item)):
+        open_count = step_type_counts[step].get("open", 0)
+        click_count = step_type_counts[step].get("click", 0)
+        step_daily_data.append(
+            {
+                "step": step,
+                "total": open_count + click_count,
+                "open": open_count,
+                "click": click_count,
+                "daily": {
+                    "open": [
+                        step_daily_counts[step][date_str].get("open", 0)
+                        for date_str in date_range
+                    ],
+                    "click": [
+                        step_daily_counts[step][date_str].get("click", 0)
+                        for date_str in date_range
+                    ],
+                },
+            }
+        )
+
     return {
         "daily": daily_data,
         "types": type_data,
+        "steps": step_daily_data,
         "topEmails": top_email_data,
+        "events": processed_events,
         "dateRange": date_range,
         "emailDaily": email_daily_data,
         "metrics": {
@@ -194,6 +251,7 @@ def export_json(input_file: Path, sheet_name: str, output_file: Path) -> None:
     print(f"  - Daily entries: {len(data['daily'])}")
     print(f"  - Email/day rows represented: {len(data['emailDaily']) * len(data['dateRange'])}")
     print(f"  - Activity types: {len(data['types'])}")
+    print(f"  - Steps: {len(data['steps'])}")
     print(f"  - Top emails: {len(data['topEmails'])}")
     print(f"  - Total events: {data['metrics']['totalEvents']}")
 

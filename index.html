@@ -214,7 +214,7 @@
 
         .email-item {
             display: grid;
-            grid-template-columns: 36px minmax(0, 1fr) 110px 110px 78px;
+            grid-template-columns: 36px minmax(0, 1fr) 140px 110px 110px 78px;
             gap: 12px;
             align-items: center;
             min-height: 42px;
@@ -244,6 +244,15 @@
             overflow: hidden;
             color: #17202a;
             font-weight: 650;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .email-steps {
+            overflow: hidden;
+            color: #52616f;
+            font-size: 0.86rem;
+            font-weight: 700;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -300,6 +309,7 @@
                 grid-template-columns: 32px minmax(0, 1fr) 72px;
             }
 
+            .email-steps,
             .email-stat.open,
             .email-stat.click {
                 display: none;
@@ -363,6 +373,17 @@
                     <h2>Open vs Click Volume</h2>
                 </div>
                 <div class="p5-container" id="type-chart-container"></div>
+            </div>
+
+            <div class="chart-card wide">
+                <div class="card-header">
+                    <h2>Activity by Step</h2>
+                    <div class="legend">
+                        <span><i class="swatch open"></i> Open</span>
+                        <span><i class="swatch click"></i> Click</span>
+                    </div>
+                </div>
+                <div class="p5-container" id="step-chart-container"></div>
             </div>
 
         </div>
@@ -458,16 +479,19 @@
         }
 
         function applyMonthFilter() {
-            if (selectedMonth === "all") {
-                filteredData = dashboardData;
-                return;
-            }
-
             const indices = dashboardData.dateRange
-                .map((date, index) => date.startsWith(selectedMonth) ? index : -1)
+                .map((date, index) => selectedMonth === "all" || date.startsWith(selectedMonth) ? index : -1)
                 .filter((index) => index >= 0);
             const dateRange = indices.map((index) => dashboardData.dateRange[index]);
-            const daily = dashboardData.daily.filter((day) => day.date.startsWith(selectedMonth));
+            const daily = dashboardData.daily.filter((day) => selectedMonth === "all" || day.date.startsWith(selectedMonth));
+            const events = dashboardData.events.filter((event) => selectedMonth === "all" || event.date.startsWith(selectedMonth));
+            const emailStepMap = new Map();
+            events.forEach((event) => {
+                if (!emailStepMap.has(event.email)) {
+                    emailStepMap.set(event.email, new Set());
+                }
+                emailStepMap.get(event.email).add(event.step);
+            });
             const emailTotals = dashboardData.emailDaily
                 .map((entry) => {
                     const open = sumByIndices(entry.daily.open, indices);
@@ -476,13 +500,24 @@
                         email: entry.email,
                         open,
                         click,
-                        count: open + click
+                        count: open + click,
+                        steps: formatStepSet(emailStepMap.get(entry.email))
                     };
                 })
                 .filter((entry) => entry.count > 0)
                 .sort((a, b) => b.count - a.count || a.email.localeCompare(b.email));
             const opens = daily.reduce((sum, day) => sum + day.open, 0);
             const clicks = daily.reduce((sum, day) => sum + day.click, 0);
+            const steps = dashboardData.steps.map((entry) => {
+                const open = sumByIndices(entry.daily.open, indices);
+                const click = sumByIndices(entry.daily.click, indices);
+                return {
+                    step: entry.step,
+                    open,
+                    click,
+                    total: open + click
+                };
+            }).filter((entry) => entry.total > 0);
 
             filteredData = {
                 daily,
@@ -491,6 +526,7 @@
                     { type: "Open", count: opens },
                     { type: "Click", count: clicks }
                 ],
+                steps,
                 topEmails: emailTotals.slice(0, 15),
                 metrics: {
                     totalEvents: opens + clicks,
@@ -506,6 +542,18 @@
             return indices.reduce((sum, index) => sum + (values[index] || 0), 0);
         }
 
+        function formatStepSet(steps) {
+            if (!steps || !steps.size) return "--";
+            return [...steps]
+                .sort((a, b) => stepNumber(a) - stepNumber(b) || a.localeCompare(b))
+                .join(", ");
+        }
+
+        function stepNumber(step) {
+            const match = String(step).match(/\d+/);
+            return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
+        }
+
         function formatMonth(month) {
             const date = new Date(`${month}-01T00:00:00`);
             return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -517,6 +565,7 @@
             }
             createDailyChart();
             createTypeChart();
+            createStepChart();
         }
 
         function chartSize(containerId, fallbackHeight = 350) {
@@ -666,6 +715,59 @@
             p.line(padding.left, padding.top + graphH, padding.left + graphW, padding.top + graphH);
         }
 
+        function createStepChart() {
+            const size = chartSize("step-chart-container", 380);
+            const sketch = new p5((p) => {
+                const data = filteredData.steps || [];
+                const padding = { top: 28, right: 90, bottom: 48, left: 92 };
+                const w = size.width;
+                const h = size.height;
+                const graphW = w - padding.left - padding.right;
+                const graphH = h - padding.top - padding.bottom;
+                const maxCount = Math.max(1, ...data.map((d) => d.total));
+
+                p.setup = () => {
+                    p.createCanvas(w, h);
+                    p.noLoop();
+                };
+
+                p.draw = () => {
+                    p.background(...palette.paper);
+                    drawHorizontalGrid(p, padding, graphW, graphH, maxCount, 4, h);
+                    if (!data.length) {
+                        p.noStroke();
+                        p.fill(...palette.muted);
+                        p.textAlign(p.CENTER, p.CENTER);
+                        p.textSize(14);
+                        p.text("No step activity for this month", w / 2, h / 2);
+                        return;
+                    }
+
+                    const rowH = graphH / data.length;
+                    data.forEach((d, i) => {
+                        const y = padding.top + i * rowH + rowH * 0.2;
+                        const barH = rowH * 0.6;
+                        const openW = (d.open / maxCount) * graphW;
+                        const clickW = (d.click / maxCount) * graphW;
+                        p.noStroke();
+                        p.fill(...palette.open);
+                        p.rect(padding.left, y, openW, barH, 5, d.click ? 0 : 5, d.click ? 0 : 5, 5);
+                        p.fill(...palette.click);
+                        p.rect(padding.left + openW, y, clickW, barH, d.open ? 0 : 5, 5, 5, d.open ? 0 : 5);
+                        p.fill(...palette.ink);
+                        p.textSize(13);
+                        p.textAlign(p.LEFT, p.CENTER);
+                        p.text(d.total.toLocaleString(), Math.min(padding.left + openW + clickW + 10, w - padding.right + 6), y + barH / 2);
+                        p.fill(...palette.muted);
+                        p.textSize(14);
+                        p.textAlign(p.RIGHT, p.CENTER);
+                        p.text(d.step, padding.left - 16, y + barH / 2);
+                    });
+                };
+            }, "step-chart-container");
+            chartInstances.push(sketch);
+        }
+
         function populateEmailList() {
             const emailList = document.getElementById("emailList");
             emailList.innerHTML = "";
@@ -680,6 +782,7 @@
                 li.innerHTML = `
                     <span class="email-rank">${index + 1}</span>
                     <span class="email-address" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</span>
+                    <span class="email-steps">${escapeHtml(item.steps || "--")}</span>
                     <span class="email-stat open">${item.open.toLocaleString()} open</span>
                     <span class="email-stat click">${item.click.toLocaleString()} click</span>
                     <span class="email-stat total">${item.count.toLocaleString()}</span>
