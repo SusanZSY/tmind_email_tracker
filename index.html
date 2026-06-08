@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Activity Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #f4f6f8;
+            color: #17202a;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .container {
+            width: min(1440px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 28px 0 36px;
+        }
+
+        header {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 22px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid #d7dde4;
+        }
+
+        h1 {
+            color: #17202a;
+            font-size: clamp(1.7rem, 3vw, 2.65rem);
+            font-weight: 750;
+            letter-spacing: 0;
+        }
+
+        header p {
+            max-width: 620px;
+            margin-top: 8px;
+            color: #52616f;
+            font-size: 1rem;
+        }
+
+        .date-chip {
+            border: 1px solid #cbd4dd;
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: #ffffff;
+            color: #394b59;
+            font-size: 0.9rem;
+            font-weight: 650;
+        }
+
+        .header-controls {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: end;
+            gap: 10px;
+        }
+
+        .month-control {
+            display: grid;
+            gap: 6px;
+        }
+
+        .month-control label {
+            color: #607180;
+            font-size: 0.74rem;
+            font-weight: 750;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .month-control select {
+            min-width: 180px;
+            border: 1px solid #cbd4dd;
+            border-radius: 8px;
+            padding: 10px 34px 10px 12px;
+            background: #ffffff;
+            color: #24313c;
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(150px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .metric-card,
+        .chart-card,
+        .top-emails {
+            border: 1px solid #dce3ea;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 10px 24px rgba(23, 32, 42, 0.06);
+        }
+
+        .metric-card {
+            padding: 18px;
+        }
+
+        .metric-label {
+            color: #607180;
+            font-size: 0.78rem;
+            font-weight: 750;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            margin-top: 8px;
+            color: #17202a;
+            font-size: clamp(1.7rem, 2.5vw, 2.35rem);
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .chart-card {
+            min-width: 0;
+            padding: 18px;
+        }
+
+        .chart-card.wide {
+            grid-column: 1 / -1;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            min-height: 38px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #edf1f5;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #24313c;
+            font-size: 1.02rem;
+            font-weight: 750;
+            letter-spacing: 0;
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #52616f;
+            font-size: 0.85rem;
+            font-weight: 650;
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .swatch {
+            width: 11px;
+            height: 11px;
+            border-radius: 3px;
+        }
+
+        .swatch.open {
+            background: #1f9d8a;
+        }
+
+        .swatch.click {
+            background: #e35d5b;
+        }
+
+        .p5-container {
+            width: 100%;
+            min-height: 350px;
+            overflow: hidden;
+            border-radius: 6px;
+            background: #fbfcfd;
+        }
+
+        .p5-container canvas {
+            display: block;
+            width: 100% !important;
+            height: auto !important;
+        }
+
+        .top-emails {
+            padding: 18px;
+        }
+
+        .email-list {
+            list-style: none;
+        }
+
+        .email-item {
+            display: grid;
+            grid-template-columns: 36px minmax(0, 1fr) 110px 110px 78px;
+            gap: 12px;
+            align-items: center;
+            min-height: 42px;
+            border-bottom: 1px solid #edf1f5;
+            color: #394b59;
+            font-size: 0.92rem;
+        }
+
+        .email-item:last-child {
+            border-bottom: 0;
+        }
+
+        .email-rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #24313c;
+            color: #ffffff;
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .email-address {
+            overflow: hidden;
+            color: #17202a;
+            font-weight: 650;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .email-stat {
+            font-variant-numeric: tabular-nums;
+            font-weight: 750;
+        }
+
+        .email-stat.open {
+            color: #1f8d7e;
+        }
+
+        .email-stat.click {
+            color: #c84d4b;
+        }
+
+        .email-stat.total {
+            color: #24313c;
+            text-align: right;
+        }
+
+        .no-data {
+            padding: 30px;
+            color: #607180;
+            text-align: center;
+        }
+
+        footer {
+            margin-top: 24px;
+            color: #607180;
+            font-size: 0.86rem;
+            text-align: center;
+        }
+
+        @media (max-width: 980px) {
+            header {
+                align-items: start;
+                flex-direction: column;
+            }
+
+            .header-controls {
+                width: 100%;
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .metrics-grid,
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .email-item {
+                grid-template-columns: 32px minmax(0, 1fr) 72px;
+            }
+
+            .email-stat.open,
+            .email-stat.click {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>Email Activity Dashboard</h1>
+                <p>Daily outreach engagement by email address, with open and click activity separated throughout the data.</p>
+            </div>
+            <div class="header-controls">
+                <div class="month-control">
+                    <label for="monthSelect">Focus Month</label>
+                    <select id="monthSelect" aria-label="Select focus month"></select>
+                </div>
+                <div class="date-chip" id="dateRange">Loading dates</div>
+            </div>
+        </header>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Events</div>
+                <div class="metric-value" id="totalEvents">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Unique Emails</div>
+                <div class="metric-value" id="uniqueEmails">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Active Days</div>
+                <div class="metric-value" id="activeDays">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Opens</div>
+                <div class="metric-value" id="openCount">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Clicks</div>
+                <div class="metric-value" id="clickCount">0</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card wide">
+                <div class="card-header">
+                    <h2>Daily Open and Click Activity</h2>
+                    <div class="legend">
+                        <span><i class="swatch open"></i> Opens</span>
+                        <span><i class="swatch click"></i> Clicks</span>
+                    </div>
+                </div>
+                <div class="p5-container" id="daily-chart-container"></div>
+            </div>
+
+            <div class="chart-card wide">
+                <div class="card-header">
+                    <h2>Open vs Click Volume</h2>
+                </div>
+                <div class="p5-container" id="type-chart-container"></div>
+            </div>
+
+        </div>
+
+        <div class="top-emails">
+            <div class="card-header">
+                <h2>Top 15 Email Recipients</h2>
+                <div class="legend">
+                    <span><i class="swatch open"></i> Open</span>
+                    <span><i class="swatch click"></i> Click</span>
+                </div>
+            </div>
+            <ul class="email-list" id="emailList">
+                <li class="no-data">Loading data...</li>
+            </ul>
+        </div>
+
+        <footer>
+            Last updated: <span id="lastUpdated">--</span>
+        </footer>
+    </div>
+
+    <script>
+        let dashboardData = null;
+        let filteredData = null;
+        let selectedMonth = "all";
+        const chartInstances = [];
+
+        const palette = {
+            open: [31, 157, 138],
+            click: [227, 93, 91],
+            ink: [36, 49, 60],
+            muted: [96, 113, 128],
+            grid: [220, 227, 234],
+            paper: [251, 252, 253]
+        };
+
+        async function loadData() {
+            try {
+                const response = await fetch("data.json");
+                if (!response.ok) throw new Error("Failed to load data.json");
+                dashboardData = await response.json();
+                initializeDashboard();
+            } catch (error) {
+                console.error(error);
+                document.getElementById("emailList").innerHTML = '<li class="no-data">Unable to load data.json</li>';
+                ["totalEvents", "uniqueEmails", "activeDays", "openCount", "clickCount"].forEach((id) => {
+                    document.getElementById(id).textContent = "Error";
+                });
+            }
+        }
+
+        function initializeDashboard() {
+            setupMonthSelector();
+            applyMonthFilter();
+            updateMetrics();
+            populateEmailList();
+            redrawCharts();
+            updateLastModified();
+            window.addEventListener("resize", debounce(redrawCharts, 180));
+        }
+
+        function updateMetrics() {
+            const metrics = filteredData.metrics;
+            document.getElementById("totalEvents").textContent = metrics.totalEvents.toLocaleString();
+            document.getElementById("uniqueEmails").textContent = metrics.uniqueEmails.toLocaleString();
+            document.getElementById("activeDays").textContent = metrics.activeDays.toLocaleString();
+            document.getElementById("openCount").textContent = metrics.opens.toLocaleString();
+            document.getElementById("clickCount").textContent = metrics.clicks.toLocaleString();
+
+            const first = filteredData.dateRange[0] || "--";
+            const last = filteredData.dateRange[filteredData.dateRange.length - 1] || "--";
+            document.getElementById("dateRange").textContent = `${first} to ${last}`;
+        }
+
+        function setupMonthSelector() {
+            const select = document.getElementById("monthSelect");
+            const months = [...new Set(dashboardData.dateRange.map((date) => date.slice(0, 7)))];
+            select.innerHTML = '<option value="all">All months</option>';
+            months.forEach((month) => {
+                const option = document.createElement("option");
+                option.value = month;
+                option.textContent = formatMonth(month);
+                select.appendChild(option);
+            });
+            select.addEventListener("change", () => {
+                selectedMonth = select.value;
+                applyMonthFilter();
+                updateMetrics();
+                populateEmailList();
+                redrawCharts();
+            });
+        }
+
+        function applyMonthFilter() {
+            if (selectedMonth === "all") {
+                filteredData = dashboardData;
+                return;
+            }
+
+            const indices = dashboardData.dateRange
+                .map((date, index) => date.startsWith(selectedMonth) ? index : -1)
+                .filter((index) => index >= 0);
+            const dateRange = indices.map((index) => dashboardData.dateRange[index]);
+            const daily = dashboardData.daily.filter((day) => day.date.startsWith(selectedMonth));
+            const emailTotals = dashboardData.emailDaily
+                .map((entry) => {
+                    const open = sumByIndices(entry.daily.open, indices);
+                    const click = sumByIndices(entry.daily.click, indices);
+                    return {
+                        email: entry.email,
+                        open,
+                        click,
+                        count: open + click
+                    };
+                })
+                .filter((entry) => entry.count > 0)
+                .sort((a, b) => b.count - a.count || a.email.localeCompare(b.email));
+            const opens = daily.reduce((sum, day) => sum + day.open, 0);
+            const clicks = daily.reduce((sum, day) => sum + day.click, 0);
+
+            filteredData = {
+                daily,
+                dateRange,
+                types: [
+                    { type: "Open", count: opens },
+                    { type: "Click", count: clicks }
+                ],
+                topEmails: emailTotals.slice(0, 15),
+                metrics: {
+                    totalEvents: opens + clicks,
+                    uniqueEmails: emailTotals.length,
+                    activeDays: dateRange.length,
+                    opens,
+                    clicks
+                }
+            };
+        }
+
+        function sumByIndices(values, indices) {
+            return indices.reduce((sum, index) => sum + (values[index] || 0), 0);
+        }
+
+        function formatMonth(month) {
+            const date = new Date(`${month}-01T00:00:00`);
+            return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+        }
+
+        function redrawCharts() {
+            while (chartInstances.length) {
+                chartInstances.pop().remove();
+            }
+            createDailyChart();
+            createTypeChart();
+        }
+
+        function chartSize(containerId, fallbackHeight = 350) {
+            const container = document.getElementById(containerId);
+            return {
+                width: Math.max(320, container.clientWidth),
+                height: Math.max(fallbackHeight, container.clientHeight)
+            };
+        }
+
+        function createDailyChart() {
+            const size = chartSize("daily-chart-container", 360);
+            const sketch = new p5((p) => {
+                const data = filteredData.daily;
+                const padding = { top: 24, right: 24, bottom: 42, left: 58 };
+                const w = size.width;
+                const h = size.height;
+                const graphW = w - padding.left - padding.right;
+                const graphH = h - padding.top - padding.bottom;
+                const maxValue = Math.max(1, ...data.flatMap((d) => [d.open, d.click]));
+
+                p.setup = () => {
+                    p.createCanvas(w, h);
+                    p.noLoop();
+                };
+
+                p.draw = () => {
+                    p.background(...palette.paper);
+                    drawGrid(p, padding, graphW, graphH, maxValue, 5);
+                    drawSeries(p, data, "open", palette.open, padding, graphW, graphH, maxValue);
+                    drawSeries(p, data, "click", palette.click, padding, graphW, graphH, maxValue);
+                    drawXAxisDates(p, data.map((d) => d.date), padding, graphW, h);
+                };
+            }, "daily-chart-container");
+            chartInstances.push(sketch);
+        }
+
+        function drawGrid(p, padding, graphW, graphH, maxValue, lines) {
+            p.stroke(...palette.grid);
+            p.strokeWeight(1);
+            p.fill(...palette.muted);
+            p.textSize(11);
+            p.textAlign(p.RIGHT, p.CENTER);
+            for (let i = 0; i <= lines; i++) {
+                const y = padding.top + (graphH / lines) * i;
+                const value = Math.round(maxValue - (maxValue / lines) * i);
+                p.line(padding.left, y, padding.left + graphW, y);
+                p.noStroke();
+                p.text(value.toLocaleString(), padding.left - 10, y);
+                p.stroke(...palette.grid);
+            }
+            p.stroke(...palette.ink);
+            p.strokeWeight(1.5);
+            p.line(padding.left, padding.top, padding.left, padding.top + graphH);
+            p.line(padding.left, padding.top + graphH, padding.left + graphW, padding.top + graphH);
+        }
+
+        function drawSeries(p, data, key, color, padding, graphW, graphH, maxValue) {
+            const denominator = Math.max(1, data.length - 1);
+            p.noFill();
+            p.stroke(...color);
+            p.strokeWeight(2.5);
+            p.beginShape();
+            data.forEach((d, i) => {
+                const x = padding.left + (graphW / denominator) * i;
+                const y = padding.top + graphH - ((d[key] || 0) / maxValue) * graphH;
+                p.vertex(x, y);
+            });
+            p.endShape();
+        }
+
+        function drawXAxisDates(p, dates, padding, graphW, height) {
+            const denominator = Math.max(1, dates.length - 1);
+            const step = Math.max(1, Math.ceil(dates.length / 8));
+            p.noStroke();
+            p.fill(...palette.muted);
+            p.textSize(11);
+            p.textAlign(p.CENTER, p.TOP);
+            dates.forEach((date, i) => {
+                if (i % step === 0 || i === dates.length - 1) {
+                    const x = padding.left + (graphW / denominator) * i;
+                    p.text(date.slice(5), x, height - padding.bottom + 12);
+                }
+            });
+        }
+
+        function createTypeChart() {
+            const size = chartSize("type-chart-container", 380);
+            const sketch = new p5((p) => {
+                const data = filteredData.types;
+                const padding = { top: 32, right: 86, bottom: 48, left: 86 };
+                const w = size.width;
+                const h = size.height;
+                const graphW = w - padding.left - padding.right;
+                const graphH = h - padding.top - padding.bottom;
+                const maxCount = Math.max(1, ...data.map((d) => d.count));
+
+                p.setup = () => {
+                    p.createCanvas(w, h);
+                    p.noLoop();
+                };
+
+                p.draw = () => {
+                    p.background(...palette.paper);
+                    drawHorizontalGrid(p, padding, graphW, graphH, maxCount, 4, h);
+                    const rowH = graphH / data.length;
+                    data.forEach((d, i) => {
+                        const y = padding.top + i * rowH + rowH * 0.24;
+                        const barH = rowH * 0.52;
+                        const barW = (d.count / maxCount) * graphW;
+                        const color = d.type.toLowerCase() === "open" ? palette.open : palette.click;
+                        p.noStroke();
+                        p.fill(...color);
+                        p.rect(padding.left, y, barW, barH, 5);
+                        p.fill(...palette.ink);
+                        p.textSize(13);
+                        p.textAlign(p.LEFT, p.CENTER);
+                        const valueX = Math.min(padding.left + barW + 10, w - padding.right + 6);
+                        p.text(d.count.toLocaleString(), valueX, y + barH / 2);
+                        p.fill(...palette.muted);
+                        p.textSize(14);
+                        p.textAlign(p.RIGHT, p.CENTER);
+                        p.text(d.type, padding.left - 16, y + barH / 2);
+                    });
+                };
+            }, "type-chart-container");
+            chartInstances.push(sketch);
+        }
+
+        function drawHorizontalGrid(p, padding, graphW, graphH, maxValue, lines, height) {
+            p.stroke(...palette.grid);
+            p.strokeWeight(1);
+            p.fill(...palette.muted);
+            p.textSize(11);
+            p.textAlign(p.CENTER, p.TOP);
+            for (let i = 0; i <= lines; i++) {
+                const x = padding.left + (graphW / lines) * i;
+                const value = Math.round((maxValue / lines) * i);
+                p.line(x, padding.top, x, padding.top + graphH);
+                p.noStroke();
+                p.text(value.toLocaleString(), x, height - padding.bottom + 14);
+                p.stroke(...palette.grid);
+            }
+            p.stroke(...palette.ink);
+            p.strokeWeight(1.5);
+            p.line(padding.left, padding.top, padding.left, padding.top + graphH);
+            p.line(padding.left, padding.top + graphH, padding.left + graphW, padding.top + graphH);
+        }
+
+        function populateEmailList() {
+            const emailList = document.getElementById("emailList");
+            emailList.innerHTML = "";
+            if (!filteredData.topEmails.length) {
+                emailList.innerHTML = '<li class="no-data">No activity for this month</li>';
+                return;
+            }
+
+            filteredData.topEmails.forEach((item, index) => {
+                const li = document.createElement("li");
+                li.className = "email-item";
+                li.innerHTML = `
+                    <span class="email-rank">${index + 1}</span>
+                    <span class="email-address" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</span>
+                    <span class="email-stat open">${item.open.toLocaleString()} open</span>
+                    <span class="email-stat click">${item.click.toLocaleString()} click</span>
+                    <span class="email-stat total">${item.count.toLocaleString()}</span>
+                `;
+                emailList.appendChild(li);
+            });
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        function debounce(fn, wait) {
+            let timer = null;
+            return () => {
+                clearTimeout(timer);
+                timer = setTimeout(fn, wait);
+            };
+        }
+
+        function updateLastModified() {
+            document.getElementById("lastUpdated").textContent = new Date().toLocaleString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", loadData);
+    </script>
+</body>
+</html>
