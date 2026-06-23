@@ -214,7 +214,7 @@
 
         .email-item {
             display: grid;
-            grid-template-columns: 36px minmax(0, 1fr) 140px 110px 110px 78px;
+            grid-template-columns: 36px minmax(0, 1fr) 140px 130px 130px 78px;
             gap: 12px;
             align-items: center;
             min-height: 42px;
@@ -451,8 +451,8 @@
             document.getElementById("totalEvents").textContent = metrics.totalEvents.toLocaleString();
             document.getElementById("uniqueEmails").textContent = metrics.uniqueEmails.toLocaleString();
             document.getElementById("activeDays").textContent = metrics.activeDays.toLocaleString();
-            document.getElementById("openCount").textContent = metrics.opens.toLocaleString();
-            document.getElementById("clickCount").textContent = metrics.clicks.toLocaleString();
+            document.getElementById("openCount").textContent = formatCountWithPercent(metrics.opens, metrics.totalEvents);
+            document.getElementById("clickCount").textContent = formatCountWithPercent(metrics.clicks, metrics.totalEvents);
 
             const first = filteredData.dateRange[0] || "--";
             const last = filteredData.dateRange[filteredData.dateRange.length - 1] || "--";
@@ -540,6 +540,17 @@
 
         function sumByIndices(values, indices) {
             return indices.reduce((sum, index) => sum + (values[index] || 0), 0);
+        }
+
+        function formatCountWithPercent(count, total) {
+            return `${count.toLocaleString()} (${formatPercent(count, total)})`;
+        }
+
+        function formatPercent(count, total) {
+            if (!total) return "0%";
+            const percent = (count / total) * 100;
+            const formatted = percent > 0 && percent < 1 ? percent.toFixed(1) : Math.round(percent).toLocaleString();
+            return `${formatted}%`;
         }
 
         function formatStepSet(steps) {
@@ -662,6 +673,7 @@
                 const graphW = w - padding.left - padding.right;
                 const graphH = h - padding.top - padding.bottom;
                 const maxCount = Math.max(1, ...data.map((d) => d.count));
+                const totalCount = data.reduce((sum, d) => sum + d.count, 0);
 
                 p.setup = () => {
                     p.createCanvas(w, h);
@@ -684,7 +696,7 @@
                         p.textSize(13);
                         p.textAlign(p.LEFT, p.CENTER);
                         const valueX = Math.min(padding.left + barW + 10, w - padding.right + 6);
-                        p.text(d.count.toLocaleString(), valueX, y + barH / 2);
+                        p.text(formatCountWithPercent(d.count, totalCount), valueX, y + barH / 2);
                         p.fill(...palette.muted);
                         p.textSize(14);
                         p.textAlign(p.RIGHT, p.CENTER);
@@ -783,8 +795,8 @@
                     <span class="email-rank">${index + 1}</span>
                     <span class="email-address" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</span>
                     <span class="email-steps">${escapeHtml(item.steps || "--")}</span>
-                    <span class="email-stat open">${item.open.toLocaleString()} open</span>
-                    <span class="email-stat click">${item.click.toLocaleString()} click</span>
+                    <span class="email-stat open">${formatCountWithPercent(item.open, item.count)} open</span>
+                    <span class="email-stat click">${formatCountWithPercent(item.click, item.count)} click</span>
                     <span class="email-stat total">${item.count.toLocaleString()}</span>
                 `;
                 emailList.appendChild(li);
