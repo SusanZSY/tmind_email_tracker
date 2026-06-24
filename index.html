@@ -411,6 +411,8 @@
         let filteredData = null;
         let selectedMonth = "all";
         const chartInstances = [];
+        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1zkiOfipunGcwhr1Ou5xMIcZeQLHiVtahLEGiA3XAdf0/export?format=csv&gid=764143868";
+        const FALLBACK_DATA_URL = "data.json";
 
         const palette = {
             open: [31, 157, 138],
@@ -423,17 +425,156 @@
 
         async function loadData() {
             try {
-                const response = await fetch("data.json");
-                if (!response.ok) throw new Error("Failed to load data.json");
-                dashboardData = await response.json();
+                dashboardData = await loadDashboardData();
                 initializeDashboard();
             } catch (error) {
                 console.error(error);
-                document.getElementById("emailList").innerHTML = '<li class="no-data">Unable to load data.json</li>';
+                document.getElementById("emailList").innerHTML = '<li class="no-data">Unable to load dashboard data</li>';
                 ["totalEvents", "uniqueEmails", "activeDays", "openCount", "clickCount"].forEach((id) => {
                     document.getElementById(id).textContent = "Error";
                 });
             }
+        }
+
+        async function loadDashboardData() {
+            try {
+                const response = await fetch(GOOGLE_SHEET_CSV_URL, { cache: "no-store" });
+                if (!response.ok) throw new Error("Failed to load Google Sheet CSV");
+                const csvText = await response.text();
+                return buildDashboardDataFromRows(parseCsv(csvText));
+            } catch (error) {
+                console.warn("Falling back to local data.json:", error);
+                const fallback = await fetch(FALLBACK_DATA_URL, { cache: "no-store" });
+                if (!fallback.ok) throw new Error("Failed to load fallback data.json");
+                return fallback.json();
+            }
+        }
+
+        function parseCsv(csvText) {
+            const rows = [];
+            let row = [];
+            let value = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < csvText.length; i += 1) {
+                const char = csvText[i];
+                const next = csvText[i + 1];
+
+                if (char === '"') {
+                    if (inQuotes && next === '"') {
+                        value += '"';
+                        i += 1;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === "," && !inQuotes) {
+                    row.push(value);
+                    value = "";
+                } else if ((char === "\n" || char === "\r") && !inQuotes) {
+                    if (char === "\r" && next === "\n") i += 1;
+                    row.push(value);
+                    if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+                    row = [];
+                    value = "";
+                } else {
+                    value += char;
+                }
+            }
+
+            row.push(value);
+            if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+            return rows;
+        }
+
+        function buildDashboardDataFromRows(rows) {
+            if (!rows.length) {
+                return { dateRange: [], daily: [], events: [], emailDaily: [], steps: [] };
+            }
+
+            const headers = rows[0].map(normalizeHeader);
+            const index = Object.fromEntries(headers.map((header, i) => [header, i]));
+            const getCell = (row, name) => cleanTrackerValue(row[index[normalizeHeader(name)]]);
+
+            const events = rows.slice(1)
+                .map((row) => {
+                    const eventType = getCell(row, "Event").toLowerCase();
+                    const campaign = getCell(row, "Campaign");
+                    return {
+                        date: formatTrackerDate(getCell(row, "Timestamp")),
+                        event: eventType,
+                        campaign,
+                        step: campaign || "Unknown",
+                        recipient: getCell(row, "Recipient Row"),
+                        email: getCell(row, "Email"),
+                        sender: getCell(row, "Sender"),
+                        link: getCell(row, "Link"),
+                        source: getCell(row, "Source")
+                    };
+                })
+                .filter((event) => event.date && (event.event === "open" || event.event === "click"));
+
+            const dateRange = [...new Set(events.map((event) => event.date))].sort();
+            const daily = dateRange.map((date) => ({
+                date,
+                open: countMatching(events, { date, event: "open" }),
+                click: countMatching(events, { date, event: "click" })
+            }));
+
+            const emails = [...new Set(events.map((event) => event.email).filter(Boolean))].sort();
+            const emailDaily = emails.map((email) => ({
+                email,
+                daily: {
+                    open: dateRange.map((date) => countMatching(events, { email, date, event: "open" })),
+                    click: dateRange.map((date) => countMatching(events, { email, date, event: "click" }))
+                }
+            }));
+
+            const stepNames = [...new Set(events.map((event) => event.step || "Unknown"))].sort((a, b) => {
+                return stepNumber(a) - stepNumber(b) || a.localeCompare(b);
+            });
+            const steps = stepNames.map((step) => ({
+                step,
+                daily: {
+                    open: dateRange.map((date) => countMatching(events, { step, date, event: "open" })),
+                    click: dateRange.map((date) => countMatching(events, { step, date, event: "click" }))
+                }
+            }));
+
+            return { dateRange, daily, events, emailDaily, steps };
+        }
+
+        function countMatching(events, criteria) {
+            return events.filter((event) => {
+                return Object.entries(criteria).every(([key, value]) => event[key] === value);
+            }).length;
+        }
+
+        function normalizeHeader(value) {
+            return String(value || "").trim().toLowerCase();
+        }
+
+        function cleanTrackerValue(value) {
+            return String(value || "").trim();
+        }
+
+        function formatTrackerDate(value) {
+            const raw = cleanTrackerValue(value);
+            if (!raw) return "";
+            const isoDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (isoDate) return `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+
+            const usDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+            if (usDate) {
+                const year = usDate[3].length === 2 ? `20${usDate[3]}` : usDate[3];
+                return `${year}-${usDate[1].padStart(2, "0")}-${usDate[2].padStart(2, "0")}`;
+            }
+
+            const parsed = new Date(raw);
+            if (Number.isNaN(parsed.getTime())) return "";
+            const year = parsed.getFullYear();
+            const month = String(parsed.getMonth() + 1).padStart(2, "0");
+            const day = String(parsed.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
         }
 
         function initializeDashboard() {
