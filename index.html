@@ -66,12 +66,12 @@
             gap: 10px;
         }
 
-        .month-control {
+        .date-control {
             display: grid;
             gap: 6px;
         }
 
-        .month-control label {
+        .date-control label {
             color: #607180;
             font-size: 0.74rem;
             font-weight: 750;
@@ -79,11 +79,11 @@
             text-transform: uppercase;
         }
 
-        .month-control select {
+        .date-control input {
             min-width: 180px;
             border: 1px solid #cbd4dd;
             border-radius: 8px;
-            padding: 10px 34px 10px 12px;
+            padding: 10px 12px;
             background: #ffffff;
             color: #24313c;
             font: inherit;
@@ -325,9 +325,13 @@
                 <p>Daily outreach engagement by email address, with open and click activity separated throughout the data.</p>
             </div>
             <div class="header-controls">
-                <div class="month-control">
-                    <label for="monthSelect">Focus Month</label>
-                    <select id="monthSelect" aria-label="Select focus month"></select>
+                <div class="date-control">
+                    <label for="startDate">Start Date</label>
+                    <input id="startDate" type="date" aria-label="Select start date">
+                </div>
+                <div class="date-control">
+                    <label for="endDate">End Date</label>
+                    <input id="endDate" type="date" aria-label="Select end date">
                 </div>
                 <div class="date-chip" id="dateRange">Loading dates</div>
             </div>
@@ -409,7 +413,8 @@
     <script>
         let dashboardData = null;
         let filteredData = null;
-        let selectedMonth = "all";
+        let selectedStartDate = "";
+        let selectedEndDate = "";
         const chartInstances = [];
         const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1zkiOfipunGcwhr1Ou5xMIcZeQLHiVtahLEGiA3XAdf0/export?format=csv&gid=764143868";
         const FALLBACK_DATA_URL = "data.json";
@@ -578,8 +583,8 @@
         }
 
         function initializeDashboard() {
-            setupMonthSelector();
-            applyMonthFilter();
+            setupDateRangeControls();
+            applyDateRangeFilter();
             updateMetrics();
             populateEmailList();
             redrawCharts();
@@ -597,35 +602,45 @@
 
             const first = filteredData.dateRange[0] || "--";
             const last = filteredData.dateRange[filteredData.dateRange.length - 1] || "--";
-            document.getElementById("dateRange").textContent = `${first} to ${last}`;
+            document.getElementById("dateRange").textContent = first === last ? first : `${first} to ${last}`;
         }
 
-        function setupMonthSelector() {
-            const select = document.getElementById("monthSelect");
-            const months = [...new Set(dashboardData.dateRange.map((date) => date.slice(0, 7)))];
-            select.innerHTML = '<option value="all">All months</option>';
-            months.forEach((month) => {
-                const option = document.createElement("option");
-                option.value = month;
-                option.textContent = formatMonth(month);
-                select.appendChild(option);
+        function setupDateRangeControls() {
+            const startInput = document.getElementById("startDate");
+            const endInput = document.getElementById("endDate");
+            const firstDate = dashboardData.dateRange[0] || "";
+            const lastDate = dashboardData.dateRange[dashboardData.dateRange.length - 1] || "";
+            const defaultDate = dashboardData.dateRange.includes(getTodayDateString()) ? getTodayDateString() : lastDate;
+
+            [startInput, endInput].forEach((input) => {
+                input.min = firstDate;
+                input.max = lastDate;
+                input.value = defaultDate;
+                input.addEventListener("change", () => {
+                    selectedStartDate = startInput.value || firstDate;
+                    selectedEndDate = endInput.value || lastDate;
+                    normalizeSelectedDateRange();
+                    startInput.value = selectedStartDate;
+                    endInput.value = selectedEndDate;
+                    applyDateRangeFilter();
+                    updateMetrics();
+                    populateEmailList();
+                    redrawCharts();
+                });
             });
-            select.addEventListener("change", () => {
-                selectedMonth = select.value;
-                applyMonthFilter();
-                updateMetrics();
-                populateEmailList();
-                redrawCharts();
-            });
+
+            selectedStartDate = defaultDate;
+            selectedEndDate = defaultDate;
         }
 
-        function applyMonthFilter() {
+        function applyDateRangeFilter() {
+            normalizeSelectedDateRange();
             const indices = dashboardData.dateRange
-                .map((date, index) => selectedMonth === "all" || date.startsWith(selectedMonth) ? index : -1)
+                .map((date, index) => date >= selectedStartDate && date <= selectedEndDate ? index : -1)
                 .filter((index) => index >= 0);
             const dateRange = indices.map((index) => dashboardData.dateRange[index]);
-            const daily = dashboardData.daily.filter((day) => selectedMonth === "all" || day.date.startsWith(selectedMonth));
-            const events = dashboardData.events.filter((event) => selectedMonth === "all" || event.date.startsWith(selectedMonth));
+            const daily = dashboardData.daily.filter((day) => day.date >= selectedStartDate && day.date <= selectedEndDate);
+            const events = dashboardData.events.filter((event) => event.date >= selectedStartDate && event.date <= selectedEndDate);
             const emailStepMap = new Map();
             events.forEach((event) => {
                 if (!emailStepMap.has(event.email)) {
@@ -679,6 +694,27 @@
             };
         }
 
+        function normalizeSelectedDateRange() {
+            const firstDate = dashboardData.dateRange[0] || "";
+            const lastDate = dashboardData.dateRange[dashboardData.dateRange.length - 1] || "";
+            selectedStartDate = selectedStartDate || firstDate;
+            selectedEndDate = selectedEndDate || lastDate;
+
+            if (selectedStartDate && selectedEndDate && selectedStartDate > selectedEndDate) {
+                const previousStart = selectedStartDate;
+                selectedStartDate = selectedEndDate;
+                selectedEndDate = previousStart;
+            }
+        }
+
+        function getTodayDateString() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, "0");
+            const day = String(today.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        }
+
         function sumByIndices(values, indices) {
             return indices.reduce((sum, index) => sum + (values[index] || 0), 0);
         }
@@ -704,11 +740,6 @@
         function stepNumber(step) {
             const match = String(step).match(/\d+/);
             return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
-        }
-
-        function formatMonth(month) {
-            const date = new Date(`${month}-01T00:00:00`);
-            return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
         }
 
         function redrawCharts() {
