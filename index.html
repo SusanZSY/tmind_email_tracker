@@ -498,7 +498,7 @@
                         date: formatTrackerDate(getCell(row, "Timestamp")),
                         event: eventType,
                         campaign,
-                        step: campaign || "Unknown",
+                        step: campaign,
                         recipient: getCell(row, "Recipient Row"),
                         email: getCell(row, "Email"),
                         sender: getCell(row, "Sender"),
@@ -524,7 +524,7 @@
                 }
             }));
 
-            const stepNames = [...new Set(events.map((event) => event.step || "Unknown"))].sort((a, b) => {
+            const stepNames = [...new Set(events.map((event) => event.step).filter(Boolean))].sort((a, b) => {
                 return stepNumber(a) - stepNumber(b) || a.localeCompare(b);
             });
             const steps = stepNames.map((step) => ({
@@ -633,6 +633,7 @@
             const events = dashboardData.events.filter((event) => event.date >= selectedStartDate && event.date <= selectedEndDate);
             const emailStepMap = new Map();
             events.forEach((event) => {
+                if (!event.step) return;
                 if (!emailStepMap.has(event.email)) {
                     emailStepMap.set(event.email, new Set());
                 }
