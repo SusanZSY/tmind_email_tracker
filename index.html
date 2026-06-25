@@ -214,7 +214,7 @@
 
         .email-item {
             display: grid;
-            grid-template-columns: 36px minmax(0, 1fr) 140px 130px 130px 78px;
+            grid-template-columns: 36px minmax(0, 1fr) 130px 130px 78px;
             gap: 12px;
             align-items: center;
             min-height: 42px;
@@ -244,15 +244,6 @@
             overflow: hidden;
             color: #17202a;
             font-weight: 650;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .email-steps {
-            overflow: hidden;
-            color: #52616f;
-            font-size: 0.86rem;
-            font-weight: 700;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -309,7 +300,6 @@
                 grid-template-columns: 32px minmax(0, 1fr) 72px;
             }
 
-            .email-steps,
             .email-stat.open,
             .email-stat.click {
                 display: none;
@@ -966,7 +956,6 @@
                 li.innerHTML = `
                     <span class="email-rank">${index + 1}</span>
                     <span class="email-address" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</span>
-                    <span class="email-steps">${escapeHtml(item.steps || "--")}</span>
                     <span class="email-stat open">${formatCountWithPercent(item.open, item.count)} open</span>
                     <span class="email-stat click">${formatCountWithPercent(item.click, item.count)} click</span>
                     <span class="email-stat total">${item.count.toLocaleString()}</span>
