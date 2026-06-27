@@ -227,6 +227,29 @@
             border-bottom: 0;
         }
 
+        .email-day-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 14px;
+            border-bottom: 1px solid #dce3ea;
+            padding: 12px 0 8px;
+            color: #24313c;
+            font-size: 0.9rem;
+            font-weight: 800;
+        }
+
+        .email-day-heading:first-child {
+            margin-top: 0;
+        }
+
+        .email-day-count {
+            color: #607180;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
         .email-rank {
             display: inline-flex;
             align-items: center;
@@ -384,7 +407,7 @@
 
         <div class="top-emails">
             <div class="card-header">
-                <h2>Top 15 Email Recipients</h2>
+                <h2>Top 15 Email Recipients by Day</h2>
                 <div class="legend">
                     <span><i class="swatch open"></i> Open</span>
                     <span><i class="swatch click"></i> Click</span>
@@ -653,6 +676,26 @@
                 })
                 .filter((entry) => entry.count > 0)
                 .sort((a, b) => b.count - a.count || a.email.localeCompare(b.email));
+            const topEmailsByDay = dateRange
+                .map((date, rangeIndex) => {
+                    const sourceIndex = indices[rangeIndex];
+                    const emails = dashboardData.emailDaily
+                        .map((entry) => {
+                            const open = entry.daily.open[sourceIndex] || 0;
+                            const click = entry.daily.click[sourceIndex] || 0;
+                            return {
+                                email: entry.email,
+                                open,
+                                click,
+                                count: open + click
+                            };
+                        })
+                        .filter((entry) => entry.count > 0)
+                        .sort((a, b) => b.count - a.count || a.email.localeCompare(b.email))
+                        .slice(0, 15);
+                    return { date, emails };
+                })
+                .filter((day) => day.emails.length > 0);
             const opens = daily.reduce((sum, day) => sum + day.open, 0);
             const clicks = daily.reduce((sum, day) => sum + day.click, 0);
             const steps = dashboardData.steps.map((entry) => {
@@ -674,6 +717,7 @@
                     { type: "Click", count: clicks }
                 ],
                 steps,
+                topEmailsByDay,
                 topEmails: emailTotals.slice(0, 15),
                 metrics: {
                     totalEvents: opens + clicks,
@@ -946,22 +990,32 @@
         function populateEmailList() {
             const emailList = document.getElementById("emailList");
             emailList.innerHTML = "";
-            if (!filteredData.topEmails.length) {
+            if (!filteredData.topEmailsByDay.length) {
                 emailList.innerHTML = '<li class="no-data">No activity for this month</li>';
                 return;
             }
 
-            filteredData.topEmails.forEach((item, index) => {
-                const li = document.createElement("li");
-                li.className = "email-item";
-                li.innerHTML = `
-                    <span class="email-rank">${index + 1}</span>
-                    <span class="email-address" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</span>
-                    <span class="email-stat open">${formatCountWithPercent(item.open, item.count)} open</span>
-                    <span class="email-stat click">${formatCountWithPercent(item.click, item.count)} click</span>
-                    <span class="email-stat total">${item.count.toLocaleString()}</span>
+            filteredData.topEmailsByDay.forEach((day) => {
+                const heading = document.createElement("li");
+                heading.className = "email-day-heading";
+                heading.innerHTML = `
+                    <span>${escapeHtml(day.date)}</span>
+                    <span class="email-day-count">${day.emails.length} recipient${day.emails.length === 1 ? "" : "s"}</span>
                 `;
-                emailList.appendChild(li);
+                emailList.appendChild(heading);
+
+                day.emails.forEach((item, index) => {
+                    const li = document.createElement("li");
+                    li.className = "email-item";
+                    li.innerHTML = `
+                        <span class="email-rank">${index + 1}</span>
+                        <span class="email-address" title="${escapeHtml(item.email)}">${escapeHtml(item.email)}</span>
+                        <span class="email-stat open">${item.open.toLocaleString()} open</span>
+                        <span class="email-stat click">${item.click.toLocaleString()} click</span>
+                        <span class="email-stat total">${item.count.toLocaleString()}</span>
+                    `;
+                    emailList.appendChild(li);
+                });
             });
         }
 
